@@ -1,0 +1,45 @@
+# Copyright (C) 2017-2023 The Android Open Source Project
+# Copyright (C) 2014-2023 The Team Win LLC
+# SPDX-License-Identifier: BSD-3-Clause
+
+import /init.recovery.qcom_decrypt.rc
+
+on init
+    setprop sys.usb.configfs 1
+    mkdir /dev/fscklogs 0770 root system
+
+on fs
+    wait /dev/block/platform/soc/${ro.boot.bootdevice}
+    symlink /dev/block/platform/soc/${ro.boot.bootdevice} /dev/block/bootdevice
+    # Mount firmware
+    mkdir /firmware
+    mount vfat /dev/block/bootdevice/by-name/modem${ro.boot.slot_suffix} /firmware ro
+    # Set fscklog permission
+    chown root system /dev/fscklogs/log
+    chmod 0770 /dev/fscklogs/log
+    start boot-hal-1-1
+    #start load_ts_firmware
+
+on property:fstab.ready=1
+    start recovery
+
+service vendor.qti.vibrator /vendor/bin/hw/vendor.qti.hardware.vibrator.service
+    class hal
+    user system
+    group system input
+    seclabel u:r:recovery:s0
+
+service load_ts_firmware /vendor/bin/load_ts_firmware.sh
+    user root
+    group root
+    oneshot
+    disabled
+    seclabel u:r:recovery:s0
+
+on property:twrp.modules.loaded=true
+    # Load ADSP firmware for PMIC
+    wait /sys/kernel/boot_adsp/boot
+    write /sys/kernel/boot_adsp/boot 1
+    wait /sys/class/power_supply/battery
+    start health-hal-2-1
+    #start vendor.qti.vibrator
